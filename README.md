@@ -18,6 +18,7 @@
 
 
 ## 📰 News
+- [Jan 26, 2026] 🎉 FastVGGT has been accepted to ICLR 2026.
 - [Sep 10, 2025] Added COLMAP outputs.
 - [Sep 8, 2025] Added custom dataset evaluation.
 - [Sep 3, 2025] Paper release.
