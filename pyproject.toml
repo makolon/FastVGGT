@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling>=1.27.0"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastvggt"
@@ -41,14 +41,9 @@ eval = [
 Homepage = "https://github.com/mystorm16/FastVGGT"
 Repository = "https://github.com/mystorm16/FastVGGT"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/merging", "src/vggt"]
+[tool.setuptools]
+package-dir = {"" = "src"}
 
-[tool.hatch.build.targets.sdist]
-include = [
-  "/LICENSE.txt",
-  "/README.md",
-  "/assets",
-  "/eval",
-  "/src",
-]
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["merging", "merging.*", "vggt", "vggt.*"]
