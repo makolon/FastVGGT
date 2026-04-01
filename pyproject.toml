@@ -16,11 +16,11 @@ dependencies = [
   "einops",
   "huggingface_hub",
   "matplotlib",
-  "numpy==1.26.1",
+  "numpy",
   "Pillow",
   "safetensors",
-  "torch==2.3.1",
-  "torchvision==0.18.1",
+  "torch>=2.3.1",
+  "torchvision>=0.18.1",
   "tqdm",
 ]
 
@@ -30,7 +30,7 @@ eval = [
   "open3d",
   "opencv-python",
   "pyceres",
-  "pycolmap==3.10.0",
+  "pycolmap",
   "PyYAML",
   "scikit-image",
   "scipy",
