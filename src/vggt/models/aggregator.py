@@ -160,7 +160,7 @@ class Aggregator(nn.Module):
         ):
             self.register_buffer(
                 name,
-                torch.tensor(value, dtype=torch.bfloat16).view(1, 1, 3, 1, 1),
+                torch.tensor(value, dtype=torch.float32).view(1, 1, 3, 1, 1),
                 persistent=False,
             )
 
@@ -224,13 +224,17 @@ class Aggregator(nn.Module):
                 and the patch_start_idx indicating where patch tokens begin.
         """
         B, S, C_in, H, W = images.shape
+        token_dtype = self.camera_token.dtype
+        token_device = images.device
 
         if C_in != 3:
             raise ValueError(f"Expected 3 input channels, got {C_in}")
 
-        # Normalize images and reshape for patch embed - ensure bf16 computation
-        images = images.to(torch.bfloat16)
-        images = (images - self._resnet_mean) / self._resnet_std
+        # Normalize images and reshape for patch embedding in the current model dtype.
+        mean = self._resnet_mean.to(device=token_device, dtype=token_dtype)
+        std = self._resnet_std.to(device=token_device, dtype=token_dtype)
+        images = images.to(dtype=token_dtype)
+        images = (images - mean) / std
 
         images = images.view(B * S, C_in, H, W)
         patch_tokens = self.patch_embed(images)
@@ -239,20 +243,20 @@ class Aggregator(nn.Module):
         if isinstance(patch_tokens, dict):
             patch_tokens = patch_tokens["x_norm_patchtokens"]
 
-        patch_tokens = patch_tokens.to(torch.bfloat16)
+        patch_tokens = patch_tokens.to(token_dtype)
 
         _, P, C = patch_tokens.shape
 
         # Expand camera and register tokens to match batch size and sequence length
         camera_token = slice_expand_and_flatten(
-            self.camera_token.to(torch.bfloat16), B, S
+            self.camera_token.to(device=token_device, dtype=token_dtype), B, S
         )
         register_token = slice_expand_and_flatten(
-            self.register_token.to(torch.bfloat16), B, S
+            self.register_token.to(device=token_device, dtype=token_dtype), B, S
         )
 
         tokens = torch.cat([camera_token, register_token, patch_tokens], dim=1)
-        tokens = tokens.to(torch.bfloat16)
+        tokens = tokens.to(token_dtype)
         del camera_token, register_token, patch_tokens
         # Explicitly clean up image data since patch embedding is complete
         if "images_normalized" in locals():
@@ -261,7 +265,7 @@ class Aggregator(nn.Module):
         pos = None
         if self.rope is not None:
             pos = self.position_getter(
-                B * S, H // self.patch_size, W // self.patch_size, device="cuda"
+                B * S, H // self.patch_size, W // self.patch_size, device=token_device
             )
 
         if self.patch_start_idx > 0:
@@ -270,7 +274,7 @@ class Aggregator(nn.Module):
             pos_original = pos
             pos = pos + 1
             pos_special = torch.zeros(
-                B * S, self.patch_start_idx, 2, device="cuda", dtype=torch.long
+                B * S, self.patch_start_idx, 2, device=token_device, dtype=torch.long
             )
             pos = torch.cat([pos_special, pos], dim=1)
             # Clean up temporary variables
@@ -298,8 +302,9 @@ class Aggregator(nn.Module):
             attn_module.vis_attn_map = False
 
         for block_num in range(self.aa_block_num):
-            torch.cuda.synchronize()
-            torch.cuda.empty_cache()
+            if token_device.type == "cuda":
+                torch.cuda.synchronize(token_device)
+                torch.cuda.empty_cache()
 
             need_intermediates = True if block_num in block4DPT_idx else False
             if block_num % 1 == 0:
@@ -376,8 +381,8 @@ class Aggregator(nn.Module):
                     [frame_intermediates[0].detach(), global_intermediates[0].detach()],
                     dim=-1,
                 )
-                if concat_inter.dtype != torch.bfloat16:
-                    concat_inter = concat_inter.to(torch.bfloat16)
+                if concat_inter.dtype != token_dtype:
+                    concat_inter = concat_inter.to(token_dtype)
                 output_list.append(concat_inter)
                 del concat_inter, frame_intermediates, global_intermediates
 
@@ -387,7 +392,8 @@ class Aggregator(nn.Module):
             del pos_special
         if "pos_original" in locals():
             del pos_original
-        torch.cuda.empty_cache()  # Final cleanup
+        if token_device.type == "cuda":
+            torch.cuda.empty_cache()  # Final cleanup
 
         return output_list, self.patch_start_idx
 

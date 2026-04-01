@@ -36,40 +36,43 @@ FastVGGT observes **strong similarity** in attention maps and leverages it to de
 
 
 ## ⚙️ Environment Setup
-First, create a virtual environment using Conda, clone this repository to your local machine, and install the required dependencies.
+FastVGGT now supports a standard `src/` package layout and can be installed directly from Git with `uv`.
 
+Install it into another project:
 
 ```bash
-conda create -n fastvggt python=3.10
-conda activate fastvggt
-git clone git@github.com:mystorm16/FastVGGT.git
+uv add git+https://github.com/mystorm16/FastVGGT.git
+```
+
+Or set up this repository locally for development:
+
+```bash
+git clone https://github.com/mystorm16/FastVGGT.git
 cd FastVGGT
-pip install -r requirements.txt
+uv sync --extra eval
 ```
 
-Next, prepare the ScanNet dataset: http://www.scan-net.org/ScanNet/
+After installation, import the model code from `vggt` in the consumer project and implement your own trainer / inference entrypoint there.
 
-Then, download the VGGT checkpoint (we use the checkpoint link provided in https://github.com/facebookresearch/vggt/tree/evaluation/evaluation):
-```bash
-wget https://huggingface.co/facebook/VGGT_tracker_fixed/resolve/main/model_tracker_fixed_e20.pt
+For example:
+
+```python
+from vggt.models.vggt import VGGT
+
+model = VGGT(merging=0, merge_ratio=0.9)
 ```
 
-Finally, configure the dataset path and VGGT checkpoint path. For example:
-```bash
-    parser.add_argument(
-        "--data_dir", type=Path, default="/data/scannetv2/process_scannet"
-    )
-    parser.add_argument(
-        "--gt_ply_dir",
-        type=Path,
-        default="/data/scannetv2/OpenDataLab___ScanNet_v2/raw/scans",
-    )
-    parser.add_argument(
-        "--ckpt_path",
-        type=str,
-        default="./ckpt/model_tracker_fixed_e20.pt",
-    )
+Expected input layout:
+
+```text
+<scene_dir>/
+├── images/
+│   ├── 000000.jpg
+│   ├── 000001.jpg
+│   └── ...
 ```
+
+Next, prepare the ScanNet dataset if you want to run the evaluation scripts: http://www.scan-net.org/ScanNet/
 
 
 ## 💎 Observation

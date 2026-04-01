@@ -14,10 +14,11 @@ torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.deterministic = False
 
-# Ensure project root is in sys.path for absolute imports like `vggt.*`
+# Ensure src/ is in sys.path for absolute imports like `vggt.*`
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
+SRC_DIR = os.path.join(ROOT_DIR, "src")
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
 
 import pycolmap
 import trimesh
