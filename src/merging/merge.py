@@ -3,14 +3,33 @@ from typing import Tuple, Callable, Optional, Union
 
 
 @torch.jit.script
+def _fast_similarity_chunks_impl(
+    a_work: torch.Tensor, b_transposed_work: torch.Tensor, chunk_size: int
+) -> Tuple[torch.Tensor, torch.Tensor]:
+
+    B, num_src, _ = a_work.shape
+    node_max = torch.empty(B, num_src, device=a_work.device, dtype=a_work.dtype)
+    node_idx = torch.empty(B, num_src, device=a_work.device, dtype=torch.long)
+
+    # Process in chunks
+    for i in range(0, num_src, chunk_size):
+        end_i = min(i + chunk_size, num_src)
+        a_chunk = a_work[:, i:end_i, :]  # [B, chunk_size, C]
+        scores_chunk = torch.bmm(a_chunk, b_transposed_work)
+        chunk_max, chunk_idx = torch.max(scores_chunk, dim=2)
+        node_max[:, i:end_i] = chunk_max
+        node_idx[:, i:end_i] = chunk_idx
+    return node_max, node_idx
+
+
 def fast_similarity_chunks(
     a: torch.Tensor, b_transposed: torch.Tensor, chunk_size: int
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-
-    B, num_src, C = a.shape
     original_dtype = a.dtype
 
-    # Use a lower-precision working dtype when possible without forcing bf16-only execution.
+    # Keep TorchScript limited to tensor ops: probing CUDA capability inside the
+    # scripted function can fail on some torch builds because internal CUDA
+    # helper annotations are not scriptable.
     if a.dtype in (torch.float16, torch.bfloat16):
         work_dtype = a.dtype
     elif a.is_cuda and torch.cuda.get_device_capability(a.device)[0] >= 8:
@@ -18,21 +37,10 @@ def fast_similarity_chunks(
     else:
         work_dtype = torch.float32
 
-    a_work = a.to(work_dtype)
-    b_transposed_work = b_transposed.to(work_dtype)
-    node_max = torch.empty(B, num_src, device=a.device, dtype=original_dtype)
-    node_idx = torch.empty(B, num_src, device=a.device, dtype=torch.long)
-
-    # Process in chunks
-    for i in range(0, num_src, chunk_size):
-        end_i = min(i + chunk_size, num_src)
-        a_chunk = a_work[:, i:end_i, :]  # [B, chunk_size, C]
-        scores_chunk = torch.bmm(a_chunk, b_transposed_work)
-        chunk_max_work, chunk_idx = torch.max(scores_chunk, dim=2)
-        chunk_max = chunk_max_work.to(original_dtype)
-        node_max[:, i:end_i] = chunk_max
-        node_idx[:, i:end_i] = chunk_idx
-    return node_max, node_idx
+    node_max, node_idx = _fast_similarity_chunks_impl(
+        a.to(work_dtype), b_transposed.to(work_dtype), chunk_size
+    )
+    return node_max.to(original_dtype), node_idx
 
 
 def do_nothing(
